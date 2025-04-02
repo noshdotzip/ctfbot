@@ -48,8 +48,7 @@ Create a `config.json` file:
 ```json
 {
     "discord_token": "your_discord_bot_token",
-    "openrouter_api_key": "your_openrouter_api_key",
-    "mapbox_token": "your_mapbox_token"
+    "openrouter_api_key": "your_openrouter_api_key"
 }
 ```
 
@@ -88,27 +87,6 @@ Ask questions to AI models.
 - `model`: Choose from available AI models
 - `question`: Your question or prompt
 
-## 🛠️ Technical Details
-
-### Dependencies
-
-```plaintext
-discord.py
-openai
-Pillow
-requests
-asyncio
-```
-
-### File Structure
-
-## 🔒 Security Features
-
-- Rate limiting on commands
-- File size restrictions
-- Secure file handling with automatic cleanup
-- Permission-based command access
-
 ## 🤝 Contributing
 
 1. Fork the repository
@@ -130,8 +108,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🔗 Links
 
 - [Discord Server](https://discord.gg/U9dUVNe6ph)
-- [Bug Report](https://github.com/yourusername/ctfbot/issues)
-- [Feature Request](https://github.com/yourusername/ctfbot/issues)
+- [Bug Report](https://github.com/noshdotzip/ctfbot/issues)
+- [Feature Request](https://github.com/noshdotzip/ctfbot/issues)
 
 ## 📊 Status
 

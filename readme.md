@@ -3,7 +3,7 @@
 A Discord bot designed for CTF enthusiasts and cybersecurity professionals, providing tools for file analysis, EXIF data extraction, and AI-powered assistance.
 
 ![Bot Status](https://img.shields.io/badge/status-active-success.svg)
-[![License: Apache 2](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache 2](https://img.shields.io/badge/license-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-7289DA)](https://discord.gg/U9dUVNe6ph)
 
 ## 🎯 Features

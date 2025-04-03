@@ -7,13 +7,10 @@ import json
 import os
 import asyncio
 import random
+import re
 from openai import OpenAI
-import folium
-import io
-from PIL import Image as PILImage
-import staticmaps
-import cairo
-import imgkit
+from io import BytesIO
+import requests
 
 with open("config.json", "r") as f:
     config = json.load(f)
@@ -21,39 +18,7 @@ with open("config.json", "r") as f:
 intents = discord.Intents.all() # i cant be bothered to assign intents manually, this should be fine for now
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
-"""
-@tree.command(
-    name="bowels",
-    description="Track your bowel movement",
-    guild=discord.Object(id=guild_id)
-)
-async def track_bowels(interaction: discord.Interaction, pre_weight: float, post_weight: float, comments: str = "", image: discord.Attachment = None, rating: int = 0):
-    weight_diff = pre_weight - post_weight
-    user_id = interaction.user.id
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    image_url = image.url if image else None
 
-    if rating < 1 or rating > 5:
-        await interaction.response.send_message("Rating must be between 1 and 5 stars.", ephemeral=True)
-        return
-
-    # Store in database
-    c.execute('INSERT INTO bowel_entries (user_id, pre_weight, post_weight, weight_diff, comments, image_url, rating, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-              (user_id, pre_weight, post_weight, weight_diff, comments, image_url, rating, timestamp))
-    conn.commit()
-    submission_id = c.lastrowid
-
-    embed = discord.Embed(
-        title="Bowel Movement Tracked",
-        description=f"Submission ID: {submission_id}\nUser: {interaction.user.mention}\nWeight Difference: {weight_diff} kg\nComments: {comments}\nRating: {'⭐' * rating}",
-        color=discord.Color.blue()
-    )
-    embed.set_footer(text=f"Timestamp: {timestamp}")
-    if image_url:
-        embed.set_image(url=image_url)
-
-    await interaction.response.send_message(embed=embed)
-"""
 @tree.command(
     name="strings",
     description="runs the string command on the attached file"
@@ -243,6 +208,9 @@ async def filetype(interaction: discord.Interaction, file: discord.Attachment):
         except Exception as e:
             print(f"Error cleaning up files: {e}")
 
+# had to comment out /exif, discord strips data from SOME image files. Until I can determine which values causes discord to strip the rest of the data, its better off disabled entirely to avoid errors.
+
+"""
 @tree.command(
     name="exif",
     description="reads the exif data of the attached image"
@@ -267,7 +235,9 @@ async def exif(interaction: discord.Interaction, file: discord.Attachment):
         'Megapixels': 'Megapixels',
         'Copyright Notice': 'Copyright',
         'Exposure Time': 'Exposure Time',
-        'Shutter Speed': 'Shutter Speed'
+        'Shutter Speed': 'Shutter Speed',
+        'GPS Latitude': 'Latitude',
+        'GPS Longitude': 'Longitude'
     }
 
     try:
@@ -298,34 +268,11 @@ async def exif(interaction: discord.Interaction, file: discord.Attachment):
                     exif_data[important_fields[key]] = value
                     # Extract GPS coordinates
                     if key == 'GPS Position':
-                        try:
-                            # Parse GPS coordinates from string like "39 deg 52' 30.00" N, 20 deg 0' 36.00" E"
-                            parts = value.split(',')
-                            lat_part = parts[0].strip()
-                            lon_part = parts[1].strip()
-                            
-                            # Parse latitude
-                            lat_deg = float(lat_part.split('deg')[0].strip())
-                            lat_min = float(lat_part.split("'")[0].split('deg')[1].strip())
-                            lat_sec = float(lat_part.split("'")[1].split('"')[0].strip())
-                            lat = lat_deg + (lat_min / 60.0) + (lat_sec / 3600.0)
-                            
-                            # Parse longitude
-                            lon_deg = float(lon_part.split('deg')[0].strip())
-                            lon_min = float(lon_part.split("'")[0].split('deg')[1].strip())
-                            lon_sec = float(lon_part.split("'")[1].split('"')[0].strip())
-                            lon = lon_deg + (lon_min / 60.0) + (lon_sec / 3600.0)
-                            
-                            # Add/subtract based on N/S and E/W
-                            if 'S' in lat_part:
-                                lat = -lat
-                            if 'W' in lon_part:
-                                lon = -lon
-                                
-                            gps_coords = (lat, lon)
-                        except Exception as e:
-                            print(f"GPS parsing error: {e}")
-                            pass
+                        gps_coords = parse_gps(value)
+
+        # print("DEBUG: Full EXIF Data Output")
+        for key, value in exif_data.items():
+            print(f"{key}: {value}")
 
         if exif_data:
             embed = discord.Embed(
@@ -343,6 +290,8 @@ async def exif(interaction: discord.Interaction, file: discord.Attachment):
                         inline=True
                     )
 
+            map_file = None
+
             # Add GPS data and map if available
             if gps_coords:
                 # Add GPS field with coordinates and link
@@ -351,22 +300,26 @@ async def exif(interaction: discord.Interaction, file: discord.Attachment):
                     value=f"```{exif_data['GPS Location']}```\n[View on OpenStreetMap](https://www.openstreetmap.org/?mlat={gps_coords[0]:.6f}&mlon={gps_coords[1]:.6f}&zoom=15)",
                     inline=False
                 )
-                
-                # Use a static map URL from OpenStreetMap's tile server
+
                 map_url = (
-                    "https://staticmap.openstreetmap.de/staticmap.php?"
-                    f"center={gps_coords[0]:.6f},{gps_coords[1]:.6f}"
-                    "&zoom=15"
-                    "&size=600x400"
-                    f"&markers={gps_coords[0]:.6f},{gps_coords[1]:.6f},red-pushpin"
-                    "&maptype=mapnik"
+                    "https://maps.geoapify.com/v1/staticmap?style=osm-bright&width=640&height=360"
+                    f"&center=lonlat:{gps_coords[1]},{gps_coords[0]}&zoom=11&marker=lonlat:{gps_coords[1]},{gps_coords[0]};color:%23ff0000;size:small&scaleFactor=2"
+                    f"&apiKey={config['geoapify_api_key']}"
                 )
-                embed.set_image(url=map_url)
+
+                response = requests.get(map_url)
+                map_image = BytesIO(response.content)
+                map_file = discord.File(map_image, filename="map.png")
+
+                embed.set_image(url="attachment://map.png")
 
             embed.set_footer(text=f"File: {file_name}")
             embed.set_thumbnail(url=file.url)
 
-            await interaction.followup.send(embed=embed)
+            if map_file:
+                await interaction.followup.send(embed=embed, file=map_file)
+            else:
+                await interaction.followup.send(embed=embed, file=map_file)
         else:
             await interaction.followup.send("No EXIF data found in the image")
 
@@ -379,6 +332,24 @@ async def exif(interaction: discord.Interaction, file: discord.Attachment):
                 os.remove(file_name)
         except Exception as e:
             print(f"Error cleaning up files: {e}")
+
+# RE for converting coordinates to decimal
+def parse_gps(gps_string):
+    '''Convert GPS coordinates from EXIF format to decimal degrees'''
+    match = re.match(r"(\d+) deg (\d+)' ([\d.]+)\" ([NSEW]), (\d+) deg (\d+)' ([\d.]+)\" ([NSEW])", gps_string)
+    if not match:
+        return None  # Failed to parse
+    
+    lat_deg, lat_min, lat_sec, lat_dir, lon_deg, lon_min, lon_sec, lon_dir = match.groups()
+    
+    lat = float(lat_deg) + float(lat_min) / 60 + float(lat_sec) / 3600
+    lon = float(lon_deg) + float(lon_min) / 60 + float(lon_sec) / 3600
+    
+    if lat_dir == 'S': lat = -lat
+    if lon_dir == 'W': lon = -lon
+    
+    return lat, lon
+"""
 
 @tree.command(
     name="ask",

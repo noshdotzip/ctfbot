@@ -1,4 +1,5 @@
 {
-    "discord_token": "discord-bot-key-here",
-    "openrouter_api_key": "open-router-key-here"
+    "discord_token": "key-here",
+    "openrouter_api_key": "key-here",
+    "geoapify_api_key": "key-here(not needed right now till /exif is fixed or another command utilizing staticmaps is added)"
 }
